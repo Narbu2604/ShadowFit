@@ -1,8 +1,8 @@
 const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 
-// BOT TOKEN HERE
-const token = 'YOUR_TELEGRAM_BOT_TOKEN';
+// BOT TOKEN FROM RENDER ENV
+const token = process.env.BOT_TOKEN;
 const bot = new TelegramBot(token, { polling: true });
 
 let data = {};
@@ -62,6 +62,7 @@ bot.onText(/\/start/, (msg) => {
 Use /quests to get your daily missions.
 Use /log [task] after completing a workout.
 Use /stats to see your current level.`);
+});
 
 bot.onText(/\/quests/, (msg) => {
   const id = msg.chat.id;
