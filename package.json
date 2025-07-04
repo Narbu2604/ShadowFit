@@ -1,7 +1,7 @@
 {
   "name": "shadowfit-bot",
   "version": "1.0.0",
-  "description": "Fitness tracker Telegram bot with daily full-body quests.",
+  "description": "Fitness tracker Telegram bot with daily quests.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
