@@ -7,24 +7,27 @@ const TOKEN = process.env.BOT_TOKEN;
 const bot = new TelegramBot(TOKEN);
 const app = express();
 
-// ✅ SET YOUR WEBHOOK TO RENDER URL
+// ✅ Set webhook to your Render URL
 bot.setWebHook(`https://shadowfit.onrender.com/${TOKEN}`);
 
+// ✅ Telegram will send updates here
 app.use(express.json());
 app.post(`/${TOKEN}`, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
+// ✅ Optional homepage route
 app.get("/", (req, res) => {
   res.send("🛡️ ShadowFit Webhook is running!");
 });
 
+// ✅ Server listens on port 3000 for Render
 app.listen(3000, () => {
   console.log("🌐 Server running on port 3000");
 });
 
-// 🧠 Load data
+// 📁 Load or initialize user data
 let data = {};
 if (fs.existsSync('data.json')) {
   data = JSON.parse(fs.readFileSync('data.json'));
@@ -42,6 +45,7 @@ function getToday() {
   return new Date().toISOString().split('T')[0];
 }
 
+// 🎯 Generate quests for a level
 function getQuestsForLevel(level) {
   const exercises = [
     { name: 'Pushups', unit: 'reps', base: 10, xp: 20 },
@@ -65,6 +69,7 @@ function getQuestsForLevel(level) {
   });
 }
 
+// 🛡️ Reset quests daily or when needed
 function checkAndResetUser(id) {
   const today = getToday();
   if (!data[id]) {
@@ -74,7 +79,6 @@ function checkAndResetUser(id) {
   const user = data[id];
   const level = getLevel(user.xp);
 
-  // ✅ Regenerate quests if it's a new day or missing
   if (user.lastActive !== today || !user.quests || user.quests.length === 0) {
     user.quests = getQuestsForLevel(level);
     user.completed = [];
@@ -83,15 +87,15 @@ function checkAndResetUser(id) {
   }
 }
 
-// /start
+// 🔁 /start
 bot.onText(/\/start/, (msg) => {
   const id = msg.chat.id;
   const name = msg.from.username || msg.from.first_name || 'Hunter';
   checkAndResetUser(id);
-  bot.sendMessage(id, `Welcome ${name} the Shadow Hunter 🛡️\nUse /quests to view today's challenges.`);
+  bot.sendMessage(id, `Welcome ${name} the Shadow Hunter 🛡️\nUse /quests to view today's missions.`);
 });
 
-// /quests
+// 📅 /quests
 bot.onText(/\/quests/, (msg) => {
   const id = msg.chat.id;
   checkAndResetUser(id);
@@ -114,30 +118,39 @@ bot.onText(/\/quests/, (msg) => {
   bot.sendMessage(id, response.trim());
 });
 
-// /log [task]
+// 📝 /log <task>
 bot.onText(/\/log (.+)/, (msg, match) => {
   const id = msg.chat.id;
-  const rawInput = match[1].trim().toLowerCase();
+  const input = match[1].trim().toLowerCase();
   checkAndResetUser(id);
   const user = data[id];
 
-  const found = user.quests.find(q => q.task.toLowerCase() === rawInput);
-  if (!found) return bot.sendMessage(id, '❌ Task not recognized.');
-  if (user.completed.includes(found.task)) {
-    return bot.sendMessage(id, `❌ You’ve already completed "${found.task}" today.`);
+  const quest = user.quests.find(q => q.task.toLowerCase() === input);
+  if (!quest) return bot.sendMessage(id, '❌ Task not recognized.');
+
+  if (user.completed.includes(quest.task)) {
+    return bot.sendMessage(id, `❌ You’ve already completed "${quest.task}" today.`);
   }
 
-  user.xp += found.xp;
-  user.completed.push(found.task);
+  user.xp += quest.xp;
+  user.completed.push(quest.task);
   saveData();
-  bot.sendMessage(id, `✅ Task completed: "${found.task}" (+${found.xp} XP)`);
+  bot.sendMessage(id, `✅ Task completed: "${quest.task}" (+${quest.xp} XP)`);
 });
 
-// /stats
+// 📊 /stats
 bot.onText(/\/stats/, (msg) => {
   const id = msg.chat.id;
   checkAndResetUser(id);
   const user = data[id];
   const level = getLevel(user.xp);
   bot.sendMessage(id, `📊 Stats:\nLevel: ${level}\nTotal XP: ${user.xp}`);
+});
+
+// ⚠️ /reset
+bot.onText(/\/reset/, (msg) => {
+  const id = msg.chat.id;
+  data[id] = { xp: 0, completed: [], lastActive: '', quests: [] };
+  saveData();
+  bot.sendMessage(id, `🔄 Progress reset. Start fresh with /start`);
 });
