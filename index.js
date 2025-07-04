@@ -170,3 +170,31 @@ bot.onText(/\/reset/, (msg) => {
   saveData();
   bot.sendMessage(id, `🔄 Progress reset. Start fresh with /start`);
 });
+// 📈 /levels
+bot.onText(/\/levels/, (msg) => {
+  const id = msg.chat.id;
+
+  const levels = [
+    { level: 1, min: 0, max: 999 },
+    { level: 2, min: 1000, max: 3499 },
+    { level: 3, min: 3500, max: 6999 },
+    { level: 4, min: 7000, max: 11999 },
+    { level: 5, min: 12000, max: 17999 },
+    { level: 6, min: 18000, max: 24999 },
+    { level: 7, min: 25000, max: 32999 },
+    { level: 8, min: 33000, max: 41999 },
+    { level: 9, min: 42000, max: 51999 },
+    { level: 10, min: 52000, max: null },
+  ];
+
+  let message = "📈 Level Ranges:\n";
+  for (const lvl of levels) {
+    if (lvl.max) {
+      message += `Level ${lvl.level}: ${lvl.min} – ${lvl.max} XP\n`;
+    } else {
+      message += `Level ${lvl.level}: ${lvl.min}+ XP\n`;
+    }
+  }
+
+  bot.sendMessage(id, message.trim());
+});
