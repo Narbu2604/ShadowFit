@@ -55,7 +55,7 @@ function getQuestsForLevel(level) {
     { name: 'Sit-ups', unit: 'reps', base: 15, xp: 20 },
     { name: 'Jumping Jacks', unit: 'reps', base: 30, xp: 20 },
     { name: 'Skipping', unit: 'times', base: 50, xp: 20 },
-    { name: 'Running', unit: 'meters', base: 1000, xp: 30 },
+    { name: 'Running', unit: 'meters', base: 200, xp: 30 },
     { name: 'Plank', unit: 'seconds', base: 30, xp: 30 }
   ];
 
