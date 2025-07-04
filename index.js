@@ -36,9 +36,25 @@ if (fs.existsSync('data.json')) {
 function saveData() {
   fs.writeFileSync('data.json', JSON.stringify(data, null, 2));
 }
-
 function getLevel(xp) {
-  return Math.floor(xp / 100) + 1;
+  const levels = [
+    0,      // Level 1
+    1000,   // Level 2
+    3500,   // Level 3
+    7000,   // Level 4
+    12000,  // Level 5
+    18000,  // Level 6
+    25000,  // Level 7
+    33000,  // Level 8
+    42000,  // Level 9
+    52000   // Level 10
+  ];
+
+  for (let i = levels.length - 1; i >= 0; i--) {
+    if (xp >= levels[i]) return i + 1;
+  }
+
+  return 1;
 }
 
 function getToday() {
@@ -48,15 +64,15 @@ function getToday() {
 // 🎯 Generate quests for a level
 function getQuestsForLevel(level) {
   const exercises = [
-    { name: 'Pushups', unit: 'reps', base: 10, xp: 20 },
-    { name: 'Squats', unit: 'reps', base: 20, xp: 25 },
-    { name: 'Crunches', unit: 'reps', base: 20, xp: 25 },
-    { name: 'Russian Twists', unit: 'reps', base: 30, xp: 25 },
-    { name: 'Sit-ups', unit: 'reps', base: 15, xp: 20 },
-    { name: 'Jumping Jacks', unit: 'reps', base: 30, xp: 20 },
+    { name: 'Pushups', unit: 'reps', base: 10, xp: 5 },
+    { name: 'Squats', unit: 'reps', base: 20, xp: 10 },
+    { name: 'Crunches', unit: 'reps', base: 20, xp: 10 },
+    { name: 'Russian Twists', unit: 'reps', base: 30, xp: 15 },
+    { name: 'Sit-ups', unit: 'reps', base: 20, xp: 10 },
+    { name: 'Jumping Jacks', unit: 'reps', base: 40, xp: 20 },
     { name: 'Skipping', unit: 'times', base: 50, xp: 20 },
-    { name: 'Running', unit: 'meters', base: 200, xp: 30 },
-    { name: 'Plank', unit: 'seconds', base: 30, xp: 30 }
+    { name: 'Running', unit: 'meters', base: 200, xp: 20 },
+    { name: 'Plank', unit: 'seconds', base: 30, xp: 10 }
   ];
 
   return exercises.map(ex => {
