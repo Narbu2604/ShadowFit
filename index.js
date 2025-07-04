@@ -2,7 +2,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 
 // BOT TOKEN HERE
-const token = 'YOUR_TELEGRAM_BOT_TOKEN';
+const token = '8043126829:AAEtjYOUhqdietu5YnHibhwoF7d22q2oQ_k';
 const bot = new TelegramBot(token, { polling: true });
 
 let data = {};
@@ -58,8 +58,10 @@ function generateQuests(level) {
 bot.onText(/\/start/, (msg) => {
   const id = msg.chat.id;
   initUser(id);
-  bot.sendMessage(id, "🗡️ Welcome, Narbu the Shadow Hunter!
+  bot.sendMessage(id, `🗡️ Welcome, Narbu the Shadow Hunter!
 Use /quests to get your daily missions.
+Use /log [task] after completing a workout.
+Use /stats to see your current level.`);
 Use /log [task] after completing a workout.
 Use /stats to see your current level.");
 });
