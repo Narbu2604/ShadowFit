@@ -1,131 +1,125 @@
+require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const fs = require('fs');
 
-// ==== Secure token from env ====
-const token = process.env.BOT_TOKEN;
-const bot = new TelegramBot(token, { polling: true });
+const TOKEN = process.env.BOT_TOKEN;
+const bot = new TelegramBot(TOKEN, { polling: true });
 
-// ==== Data file ====
-const DATA_FILE = 'data.json';
-let userData = {};
+const app = express();
+app.get('/', (req, res) => res.send('🛡️ ShadowFit bot is running'));
+app.listen(3000, () => console.log('Web server running on port 3000'));
 
-// ==== Load data on start ====
-if (fs.existsSync(DATA_FILE)) {
-  userData = JSON.parse(fs.readFileSync(DATA_FILE));
+let data = {};
+if (fs.existsSync('data.json')) {
+  data = JSON.parse(fs.readFileSync('data.json'));
 }
 
-// ==== Save data to file ====
 function saveData() {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(userData, null, 2));
+  fs.writeFileSync('data.json', JSON.stringify(data, null, 2));
 }
 
-// ==== Daily quests ====
-const dailyQuests = [
-  { task: 'Do 20 squats', xp: 25 },
-  { task: 'Do 10 pushups', xp: 20 },
-];
-
-// ==== Get level ====
 function getLevel(xp) {
-  return Math.floor(xp / 200) + 1;
+  return Math.floor(xp / 100) + 1;
 }
 
-// ==== Reset quests if new day ====
+function getToday() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function getQuestsForLevel(level) {
+  const exercises = [
+    { name: 'Pushups', unit: 'reps', base: 10, xp: 20 },
+    { name: 'Squats', unit: 'reps', base: 20, xp: 25 },
+    { name: 'Crunches', unit: 'reps', base: 20, xp: 25 },
+    { name: 'Russian Twists', unit: 'reps', base: 30, xp: 25 },
+    { name: 'Sit-ups', unit: 'reps', base: 15, xp: 20 },
+    { name: 'Jumping Jacks', unit: 'reps', base: 30, xp: 20 },
+    { name: 'Skipping', unit: 'times', base: 50, xp: 20 },
+    { name: 'Running', unit: 'meters', base: 200, xp: 30 },
+    { name: 'Plank', unit: 'seconds', base: 30, xp: 30 }
+  ];
+
+  return exercises.map(ex => {
+    const amount = ex.base + level * 5;
+    const xp = ex.xp + level * 3;
+    return {
+      task: `${ex.name} ${amount} ${ex.unit}`,
+      xp: xp
+    };
+  });
+}
+
 function checkAndResetUser(id) {
-  const today = new Date().toISOString().slice(0, 10); // yyyy-mm-dd
-
-  if (!userData[id]) {
-    userData[id] = { xp: 0, completed: [], lastActive: today };
+  const today = getToday();
+  if (!data[id]) {
+    data[id] = { xp: 0, completed: [], lastActive: today, quests: [] };
   }
-
-  if (userData[id].lastActive !== today) {
-    userData[id].completed = [];
-    userData[id].lastActive = today;
+  if (data[id].lastActive !== today) {
+    const level = getLevel(data[id].xp);
+    data[id].quests = getQuestsForLevel(level);
+    data[id].completed = [];
+    data[id].lastActive = today;
     saveData();
   }
 }
 
-// ==== /start ====
+// /start
 bot.onText(/\/start/, (msg) => {
   const id = msg.chat.id;
-  const name = msg.from.username ? `@${msg.from.username}` : msg.from.first_name;
-
+  const name = msg.from.username || msg.from.first_name || 'Hunter';
   checkAndResetUser(id);
-
-  bot.sendMessage(id,
-    `🛡️ Welcome, ${name} the Shadow Hunter!\n\n` +
-    `Use /quests to view your daily missions.\n` +
-    `Use /log [task] after completing a workout.\n` +
-    `Use /stats to check your XP and level.`
-  );
+  bot.sendMessage(id, `Welcome ${name} the Shadow Hunter 🛡️\nUse /quests to view today's challenges.`);
 });
 
-// ==== /quests ====
+// /quests
 bot.onText(/\/quests/, (msg) => {
   const id = msg.chat.id;
   checkAndResetUser(id);
-
-  const user = userData[id];
+  const user = data[id];
   const level = getLevel(user.xp);
 
-  let response = `📅 Today's Quests (Level ${level}):\n`;
-  for (const quest of dailyQuests) {
-    const done = user.completed.includes(quest.task);
-    response += `${done ? '✅' : '⭕'} ${quest.task} (+${quest.xp} XP)\n`;
+  let completed = '';
+  let remaining = '';
+
+  for (const quest of user.quests) {
+    const isDone = user.completed.includes(quest.task);
+    const line = `${quest.task} (+${quest.xp} XP)\n`;
+
+    if (isDone) completed += `✅ ${line}`;
+    else remaining += `🔘 ${line}`;
   }
 
-  bot.sendMessage(id, response);
+  let response = `📅 Today's Quests (Level ${level}):\n\n`;
+  if (remaining) response += `🕒 Remaining:\n${remaining}\n`;
+  if (completed) response += `🏁 Completed:\n${completed}`;
+  bot.sendMessage(id, response.trim());
 });
 
-// ==== /log [task] ====
+// /log
 bot.onText(/\/log (.+)/, (msg, match) => {
   const id = msg.chat.id;
   const rawInput = match[1].trim().toLowerCase();
-  const normalizedInput = rawInput.replace(/^do\s+/i, '').trim();
-
   checkAndResetUser(id);
-  const user = userData[id];
+  const user = data[id];
 
-  const found = dailyQuests.find(q => {
-    const normalizedTask = q.task.toLowerCase().replace(/^do\s+/i, '').trim();
-    return normalizedTask === normalizedInput;
-  });
-
-  if (!found) {
-    return bot.sendMessage(id, '❌ Task not recognized.');
-  }
-
+  const found = user.quests.find(q => q.task.toLowerCase() === rawInput);
+  if (!found) return bot.sendMessage(id, '❌ Task not recognized.');
   if (user.completed.includes(found.task)) {
-    return bot.sendMessage(id, '❌ Task already completed today.');
+    return bot.sendMessage(id, `❌ You’ve already completed "${found.task}" today.`);
   }
 
   user.xp += found.xp;
   user.completed.push(found.task);
   saveData();
-
   bot.sendMessage(id, `✅ Task completed: "${found.task}" (+${found.xp} XP)`);
 });
 
-// ==== /stats ====
+// /stats
 bot.onText(/\/stats/, (msg) => {
   const id = msg.chat.id;
   checkAndResetUser(id);
-  const user = userData[id];
-
+  const user = data[id];
   const level = getLevel(user.xp);
-  const nextXP = level * 200;
-  const percent = ((user.xp / nextXP) * 100).toFixed(1);
-  const name = msg.from.username ? `@${msg.from.username}` : msg.from.first_name;
-
-  bot.sendMessage(id,
-    `🧍 ${name} the Shadow Hunter\n` +
-    `Level: ${level}\n` +
-    `📏 XP: ${user.xp} / ${nextXP} (${percent}%)`);
+  bot.sendMessage(id, `📊 Stats:\nLevel: ${level}\nTotal XP: ${user.xp}`);
 });
-
-// ==== Express server to keep bot alive on Render ====
-const app = express();
-const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('🛡️ ShadowFit bot is running'));
-app.listen(PORT, () => console.log(`✅ Web server on port ${PORT}`));
