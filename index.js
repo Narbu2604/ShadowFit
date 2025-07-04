@@ -4,12 +4,27 @@ const express = require('express');
 const fs = require('fs');
 
 const TOKEN = process.env.BOT_TOKEN;
-const bot = new TelegramBot(TOKEN, { polling: true });
-
+const bot = new TelegramBot(TOKEN);
 const app = express();
-app.get('/', (req, res) => res.send('🛡️ ShadowFit bot is running'));
-app.listen(3000, () => console.log('Web server running on port 3000'));
 
+// ✅ SET YOUR WEBHOOK TO RENDER URL
+bot.setWebHook(`https://shadowfit.onrender.com/${TOKEN}`);
+
+app.use(express.json());
+app.post(`/${TOKEN}`, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
+app.get("/", (req, res) => {
+  res.send("🛡️ ShadowFit Webhook is running!");
+});
+
+app.listen(3000, () => {
+  console.log("🌐 Server running on port 3000");
+});
+
+// 🧠 Load data
 let data = {};
 if (fs.existsSync('data.json')) {
   data = JSON.parse(fs.readFileSync('data.json'));
@@ -53,13 +68,17 @@ function getQuestsForLevel(level) {
 function checkAndResetUser(id) {
   const today = getToday();
   if (!data[id]) {
-    data[id] = { xp: 0, completed: [], lastActive: today, quests: [] };
+    data[id] = { xp: 0, completed: [], lastActive: '', quests: [] };
   }
-  if (data[id].lastActive !== today) {
-    const level = getLevel(data[id].xp);
-    data[id].quests = getQuestsForLevel(level);
-    data[id].completed = [];
-    data[id].lastActive = today;
+
+  const user = data[id];
+  const level = getLevel(user.xp);
+
+  // ✅ Regenerate quests if it's a new day or missing
+  if (user.lastActive !== today || !user.quests || user.quests.length === 0) {
+    user.quests = getQuestsForLevel(level);
+    user.completed = [];
+    user.lastActive = today;
     saveData();
   }
 }
@@ -85,7 +104,6 @@ bot.onText(/\/quests/, (msg) => {
   for (const quest of user.quests) {
     const isDone = user.completed.includes(quest.task);
     const line = `${quest.task} (+${quest.xp} XP)\n`;
-
     if (isDone) completed += `✅ ${line}`;
     else remaining += `🔘 ${line}`;
   }
@@ -96,7 +114,7 @@ bot.onText(/\/quests/, (msg) => {
   bot.sendMessage(id, response.trim());
 });
 
-// /log
+// /log [task]
 bot.onText(/\/log (.+)/, (msg, match) => {
   const id = msg.chat.id;
   const rawInput = match[1].trim().toLowerCase();
