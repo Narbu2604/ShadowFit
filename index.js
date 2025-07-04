@@ -36,33 +36,31 @@ if (fs.existsSync('data.json')) {
 function saveData() {
   fs.writeFileSync('data.json', JSON.stringify(data, null, 2));
 }
+
+// 🎯 XP Level logic
 function getLevel(xp) {
   const levels = [
-    0,      // Level 1
-    1000,   // Level 2
-    3500,   // Level 3
-    7000,   // Level 4
-    12000,  // Level 5
-    18000,  // Level 6
-    25000,  // Level 7
-    33000,  // Level 8
-    42000,  // Level 9
-    52000   // Level 10
+    0, 1000, 3500, 7000, 12000,
+    18000, 25000, 33000, 42000, 52000
   ];
 
   for (let i = levels.length - 1; i >= 0; i--) {
     if (xp >= levels[i]) return i + 1;
   }
-
   return 1;
 }
 
+// 🕓 Return date with 4 AM IST logic
 function getToday() {
-  return new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000; // IST offset
+  const istTime = new Date(now.getTime() + istOffset);
+  istTime.setHours(istTime.getHours() - 4);
+  return istTime.toISOString().split('T')[0];
 }
 
-// 🎯 Generate quests for a level
-function getQuestsForLevel(level) {
+// 💪 Generate level-based & streak-based quests
+function getQuestsForLevel(level, streak = 1) {
   const exercises = [
     { name: 'Pushups', unit: 'reps', base: 10, xp: 5 },
     { name: 'Squats', unit: 'reps', base: 20, xp: 10 },
@@ -76,7 +74,14 @@ function getQuestsForLevel(level) {
   ];
 
   return exercises.map(ex => {
-    const amount = ex.base + level * 5;
+    let amount;
+
+    if (ex.name === 'Running') {
+      amount = Math.round(ex.base * Math.pow(1.5, streak - 1));
+    } else {
+      amount = ex.base + (level * 5) + (streak * 2);
+    }
+
     const xp = ex.xp + level * 3;
     return {
       task: `${ex.name} ${amount} ${ex.unit}`,
@@ -85,18 +90,29 @@ function getQuestsForLevel(level) {
   });
 }
 
-// 🛡️ Reset quests daily or when needed
+// 🔁 Generate new quests if date changed
 function checkAndResetUser(id) {
   const today = getToday();
+
   if (!data[id]) {
-    data[id] = { xp: 0, completed: [], lastActive: '', quests: [] };
+    data[id] = {
+      xp: 0,
+      completed: [],
+      lastActive: '',
+      quests: [],
+      streak: 1
+    };
   }
 
   const user = data[id];
   const level = getLevel(user.xp);
 
   if (user.lastActive !== today || !user.quests || user.quests.length === 0) {
-    user.quests = getQuestsForLevel(level);
+    if (user.lastActive !== today) {
+      user.streak = (user.streak || 1) + 1;
+    }
+
+    user.quests = getQuestsForLevel(level, user.streak);
     user.completed = [];
     user.lastActive = today;
     saveData();
@@ -160,16 +176,17 @@ bot.onText(/\/stats/, (msg) => {
   checkAndResetUser(id);
   const user = data[id];
   const level = getLevel(user.xp);
-  bot.sendMessage(id, `📊 Stats:\nLevel: ${level}\nTotal XP: ${user.xp}`);
+  bot.sendMessage(id, `📊 Stats:\nLevel: ${level}\nTotal XP: ${user.xp}\n🔥 Streak: ${user.streak} day(s)`);
 });
 
 // ⚠️ /reset
 bot.onText(/\/reset/, (msg) => {
   const id = msg.chat.id;
-  data[id] = { xp: 0, completed: [], lastActive: '', quests: [] };
+  data[id] = { xp: 0, completed: [], lastActive: '', quests: [], streak: 1 };
   saveData();
   bot.sendMessage(id, `🔄 Progress reset. Start fresh with /start`);
 });
+
 // 📈 /levels
 bot.onText(/\/levels/, (msg) => {
   const id = msg.chat.id;
