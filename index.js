@@ -62,9 +62,6 @@ bot.onText(/\/start/, (msg) => {
 Use /quests to get your daily missions.
 Use /log [task] after completing a workout.
 Use /stats to see your current level.`);
-Use /log [task] after completing a workout.
-Use /stats to see your current level.");
-});
 
 bot.onText(/\/quests/, (msg) => {
   const id = msg.chat.id;
