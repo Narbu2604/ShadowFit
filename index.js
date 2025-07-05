@@ -1,3 +1,5 @@
+// index.js
+
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
@@ -13,9 +15,8 @@ app.post(`/${TOKEN}`, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
-
-app.get('/', (req, res) => res.send('🛡️ ShadowFit Webhook is running!'));
-app.listen(3000, () => console.log('🌐 Server on port 3000'));
+app.get("/", (req, res) => res.send("🛡️ ShadowFit Webhook is running!"));
+app.listen(3000, () => console.log("🌐 Server on 3000"));
 
 let data = {};
 if (fs.existsSync('data.json')) data = JSON.parse(fs.readFileSync('data.json'));
@@ -23,37 +24,23 @@ function saveData() { fs.writeFileSync('data.json', JSON.stringify(data, null, 2
 
 function getToday() {
   const now = new Date();
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istTime = new Date(now.getTime() + istOffset);
-  istTime.setHours(istTime.getHours() - 4);
-  return istTime.toISOString().split('T')[0];
+  now.setHours(now.getHours() + 5, now.getMinutes() + 30); // IST
+  now.setHours(now.getHours() - 4); // Daily reset at 4 AM IST
+  return now.toISOString().split('T')[0];
 }
 
 function getLevel(xp) {
-  const levels = [0, 1000, 3500, 7000, 12000, 18000, 25000, 33000, 42000, 52000];
-  for (let i = levels.length - 1; i >= 0; i--) {
-    if (xp >= levels[i]) return i + 1;
+  const thresholds = [0, 1000, 3500, 7000, 12000, 18000, 25000, 33000, 42000, 52000];
+  for (let i = thresholds.length - 1; i >= 0; i--) {
+    if (xp >= thresholds[i]) return i + 1;
   }
   return 1;
 }
 
-function getTitle(level) {
-  const titles = ["Novice", "Trainee", "Fighter", "Warrior", "Beast", "Elite", "Shadow Knight", "Overlord", "Ascendant", "God Hunter"];
-  return titles[Math.min(level - 1, titles.length - 1)];
-}
+function getQuestsForUser(user) {
+  const level = getLevel(user.xp);
+  const dayCount = (user.weightLog?.length || 1);
 
-function getMotivation() {
-  const quotes = [
-    "Push yourself, because no one else is going to do it for you.",
-    "One more rep, one step closer.",
-    "Consistency is more important than intensity.",
-    "You don’t have to be great to start, but you have to start to be great.",
-    "Every drop of sweat is a step to your stronger self."
-  ];
-  return quotes[Math.floor(Math.random() * quotes.length)];
-}
-
-function getQuestsForLevel(level, day) {
   const exercises = [
     { name: 'Pushups', unit: 'reps', base: 10, xp: 5 },
     { name: 'Squats', unit: 'reps', base: 20, xp: 10 },
@@ -62,53 +49,220 @@ function getQuestsForLevel(level, day) {
     { name: 'Sit-ups', unit: 'reps', base: 20, xp: 10 },
     { name: 'Jumping Jacks', unit: 'reps', base: 40, xp: 20 },
     { name: 'Skipping', unit: 'times', base: 50, xp: 20 },
-    { name: 'Running', unit: 'meters', base: 200, xp: 20, multiplier: 1.5 },
-    { name: 'Plank', unit: 'seconds', base: 30, xp: 10 }
+    { name: 'Running', unit: 'meters', base: Math.round(200 * (1.5 ** (dayCount - 1))), xp: 20 + (level * 2) },
+    { name: 'Plank', unit: 'seconds', base: 30 + dayCount * 3, xp: 10 + level }
   ];
 
-  return exercises.map(ex => {
-    const isRunning = ex.name === 'Running';
-    const amount = isRunning
-      ? Math.round(ex.base * Math.pow(ex.multiplier || 1, day))
-      : ex.base + level * 5 + day * 2;
-    const xp = ex.xp + level * 3;
-    return { task: `${ex.name} ${amount} ${ex.unit}`, xp: xp };
-  });
+  return exercises.map(ex => ({
+    task: `${ex.name} ${ex.base + level * 5} ${ex.unit}`,
+    xp: ex.xp + level * 2
+  }));
 }
 
-function checkAndResetUser(id) {
+function checkUser(id) {
   const today = getToday();
   if (!data[id]) {
     data[id] = {
-      xp: 0, weight: [], targetWeight: null, streak: 0, completed: [], lastActive: '', quests: [], joinDate: today,
-      badges: [], challenges: {}, restDays: [], history: [], motivational: getMotivation(), timers: {}
+      xp: 0,
+      completed: [],
+      lastActive: '',
+      quests: [],
+      streak: 0,
+      weightLog: [],
+      goalWeight: null,
+      titles: [],
+      checkins: [],
+      restUsed: false,
+      history: {}
     };
   }
   const user = data[id];
-  const level = getLevel(user.xp);
 
   if (user.lastActive !== today) {
-    const day = Math.floor((new Date(today) - new Date(user.joinDate)) / 86400000);
-    user.history.push({ date: user.lastActive, xp: user.xp });
-    user.quests = getQuestsForLevel(level, day);
+    if (user.lastActive === getYesterday()) user.streak += 1;
+    else user.streak = 1;
+
+    user.quests = getQuestsForUser(user);
     user.completed = [];
     user.lastActive = today;
-    user.streak += 1;
-    user.motivational = getMotivation();
-    saveData();
+    user.restUsed = false;
   }
+
+  saveData();
 }
 
-bot.onText(/\/starttimer (.+)/, (msg, match) => {
+function getYesterday() {
+  const now = new Date();
+  now.setHours(now.getHours() + 5.5 * 60 - 4); // 4AM reset
+  now.setDate(now.getDate() - 1);
+  return now.toISOString().split('T')[0];
+}
+
+// === BOT COMMANDS ===
+
+bot.onText(/\/start/, msg => {
   const id = msg.chat.id;
-  const input = match[1];
-  const minutes = parseInt(input);
-  if (!isNaN(minutes) && minutes > 0) {
-    bot.sendMessage(id, `⏱️ Timer started for ${minutes} minutes.`);
-    setTimeout(() => {
-      bot.sendMessage(id, `⏰ Time's up! ${minutes} minutes passed.`);
-    }, minutes * 60000);
-  } else {
-    bot.sendMessage(id, '⚠️ Invalid time. Use /starttimer <minutes>.');
+  const name = msg.from.username || msg.from.first_name || 'Hunter';
+  checkUser(id);
+  bot.sendMessage(id, `Welcome ${name} the Shadow Hunter 🛡️\nUse /quests to begin your transformation.`);
+});
+
+bot.onText(/\/quests/, msg => {
+  const id = msg.chat.id;
+  checkUser(id);
+  const user = data[id];
+  const level = getLevel(user.xp);
+
+  const completed = user.completed;
+  const quests = user.quests;
+
+  let response = `📅 Today's Quests (Level ${level}):\n\n`;
+  const remaining = quests.filter(q => !completed.includes(q.task));
+  const done = quests.filter(q => completed.includes(q.task));
+
+  if (remaining.length > 0) {
+    response += '🕒 Remaining:\n' + remaining.map(q => `🔘 ${q.task} (+${q.xp} XP)`).join('\n') + '\n\n';
   }
+  if (done.length > 0) {
+    response += '🏁 Completed:\n' + done.map(q => `✅ ${q.task} (+${q.xp} XP)`).join('\n');
+  }
+
+  bot.sendMessage(id, response.trim());
+});
+
+bot.onText(/\/log (.+)/, (msg, match) => {
+  const id = msg.chat.id;
+  const input = match[1].trim().toLowerCase();
+  checkUser(id);
+  const user = data[id];
+
+  const quest = user.quests.find(q => q.task.toLowerCase() === input);
+  if (!quest) return bot.sendMessage(id, `❌ Not recognized task: "${input}"`);
+  if (user.completed.includes(quest.task)) return bot.sendMessage(id, `❌ Already completed.`);
+
+  user.completed.push(quest.task);
+  user.xp += quest.xp;
+  saveData();
+
+  bot.sendMessage(id, `✅ "${quest.task}" logged! (+${quest.xp} XP)`);
+});
+
+bot.onText(/\/stats/, msg => {
+  const id = msg.chat.id;
+  checkUser(id);
+  const user = data[id];
+  bot.sendMessage(id, `📊 Stats:\nLevel: ${getLevel(user.xp)}\nXP: ${user.xp}\n🔥 Streak: ${user.streak} days`);
+});
+
+bot.onText(/\/weight (\d+(\.\d+)?)/, (msg, match) => {
+  const id = msg.chat.id;
+  const weight = parseFloat(match[1]);
+  checkUser(id);
+  const user = data[id];
+  const today = getToday();
+  user.weightLog = user.weightLog || [];
+  user.weightLog.push({ date: today, weight });
+  saveData();
+  bot.sendMessage(id, `✅ Weight logged: ${weight} kg`);
+});
+
+bot.onText(/\/weightlog/, msg => {
+  const id = msg.chat.id;
+  checkUser(id);
+  const logs = (data[id].weightLog || []).slice(-7);
+  if (logs.length === 0) return bot.sendMessage(id, "📉 No weight logs yet.");
+  const msgText = logs.map(w => `${w.date}: ${w.weight} kg`).join('\n');
+  bot.sendMessage(id, `📆 Last 7 Days:\n${msgText}`);
+});
+
+bot.onText(/\/targetweight (\d+(\.\d+)?)/, (msg, match) => {
+  const id = msg.chat.id;
+  checkUser(id);
+  data[id].goalWeight = parseFloat(match[1]);
+  saveData();
+  bot.sendMessage(id, `🎯 Goal set: ${data[id].goalWeight} kg`);
+});
+
+bot.onText(/\/progress/, msg => {
+  const id = msg.chat.id;
+  checkUser(id);
+  const user = data[id];
+  const start = user.weightLog?.[0]?.weight;
+  const current = user.weightLog?.[user.weightLog.length - 1]?.weight;
+  const goal = user.goalWeight;
+
+  if (!start || !current || !goal) return bot.sendMessage(id, "ℹ️ Missing weight logs or goal.");
+
+  const lost = (start - current).toFixed(1);
+  const remaining = (current - goal).toFixed(1);
+  bot.sendMessage(id, `📉 Progress:\nStart: ${start}kg\nNow: ${current}kg\nLost: ${lost}kg\nTo Goal: ${remaining}kg`);
+});
+
+bot.onText(/\/rest/, msg => {
+  const id = msg.chat.id;
+  checkUser(id);
+  const user = data[id];
+  if (user.restUsed) return bot.sendMessage(id, "❌ You already used your rest day.");
+  user.restUsed = true;
+  user.streak += 1;
+  saveData();
+  bot.sendMessage(id, "🛌 Rest day used. Streak preserved.");
+});
+
+bot.onText(/\/levels/, msg => {
+  const levels = [0, 1000, 3500, 7000, 12000, 18000, 25000, 33000, 42000, 52000];
+  const message = levels.map((v, i) =>
+    i === levels.length - 1
+      ? `Level ${i + 1}: ${v}+ XP`
+      : `Level ${i + 1}: ${v}–${levels[i + 1] - 1} XP`
+  ).join('\n');
+  bot.sendMessage(msg.chat.id, `📈 Levels:\n${message}`);
+});
+
+bot.onText(/\/leaderboard/, msg => {
+  const leaderboard = Object.entries(data)
+    .map(([id, user]) => ({ id, xp: user.xp }))
+    .sort((a, b) => b.xp - a.xp)
+    .slice(0, 5)
+    .map((u, i) => `${i + 1}. 🧍‍♂️ ID ${u.id.slice(-5)}: ${u.xp} XP`)
+    .join('\n');
+  bot.sendMessage(msg.chat.id, `🏆 Leaderboard:\n${leaderboard}`);
+});
+
+bot.onText(/\/timer (.+) (\d+)/, (msg, match) => {
+  const id = msg.chat.id;
+  const task = match[1];
+  const secs = parseInt(match[2]);
+  bot.sendMessage(id, `⏱️ Timer started for ${task}: ${secs}s`);
+  setTimeout(() => {
+    bot.sendMessage(id, `✅ Time's up for: ${task}`);
+  }, secs * 1000);
+});
+
+bot.on('photo', msg => {
+  const id = msg.chat.id;
+  checkUser(id);
+  const fileId = msg.photo[msg.photo.length - 1].file_id;
+  data[id].checkins.push({ date: getToday(), fileId });
+  saveData();
+  bot.sendMessage(id, "📸 Check-in saved!");
+});
+
+bot.onText(/\/weekly/, msg => {
+  const id = msg.chat.id;
+  checkUser(id);
+  const user = data[id];
+  const weekXp = user.completed.length * 10; // Approx.
+  bot.sendMessage(id, `📅 Weekly Summary:\nStreak: ${user.streak}\nXP earned: ~${weekXp} XP`);
+});
+
+bot.onText(/\/monthly/, msg => {
+  const id = msg.chat.id;
+  checkUser(id);
+  const user = data[id];
+  const monthXp = user.xp;
+  const logs = user.weightLog || [];
+  const start = logs[0]?.weight;
+  const current = logs[logs.length - 1]?.weight;
+  bot.sendMessage(id, `📆 Monthly Summary:\nXP: ${monthXp}\nWeight Change: ${start}kg → ${current}kg`);
 });
