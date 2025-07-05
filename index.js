@@ -154,6 +154,68 @@ bot.onText(/\/stats/, msg => {
   bot.sendMessage(id, `📊 Stats:\nLevel: ${getLevel(user.xp)}\nXP: ${user.xp}\n🔥 Streak: ${user.streak} days`);
 });
 
+bot.onText(/\/bmi (\d+(\.\d+)?) (\d+(\.\d+)?)( \d{1,3})?/, (msg, match) => {
+  const id = msg.chat.id;
+  const weight = parseFloat(match[1]); // User's weight in kg
+  const height = parseFloat(match[3]); // User's height in meters
+  const age = match[5] ? parseInt(match[5]) : null; // Optional user age (e.g., 25)
+
+  // Ensure valid input
+  if (isNaN(weight) || isNaN(height) || weight <= 0 || height <= 0) {
+    return bot.sendMessage(id, "❌ Please provide valid weight (kg) and height (meters). Example: /bmi 70 1.75 25");
+  }
+
+  // Calculate BMI using the real formula
+  const bmi = weight / (height * height);
+
+  // Determine health status based on BMI
+  let healthStatus = "";
+  if (bmi < 18.5) {
+    healthStatus = "Underweight: You should consider gaining some weight.";
+  } else if (bmi >= 18.5 && bmi < 24.9) {
+    healthStatus = "Normal weight: You're in good shape!";
+  } else if (bmi >= 25 && bmi < 29.9) {
+    healthStatus = "Overweight: You should consider losing some weight.";
+  } else {
+    healthStatus = "Obese: You should consider losing weight for better health.";
+  }
+
+  // Age-based tips (optional)
+  let ageTip = "";
+  if (age !== null) {
+    if (age < 18) {
+      ageTip = "As a younger individual, your BMI might change as you grow, so it's good to monitor your health regularly.";
+    } else if (age >= 18 && age < 40) {
+      ageTip = "You're in the prime of your life! Focus on staying active and maintaining a healthy lifestyle.";
+    } else if (age >= 40 && age < 60) {
+      ageTip = "As you age, muscle mass naturally decreases, so it's important to stay active and focus on strength training.";
+    } else {
+      ageTip = "At your age, maintaining a healthy BMI is key to reducing health risks. Keep moving and watch your diet.";
+    }
+  }
+
+  // Send the result with BMI and age context
+  bot.sendMessage(id, `📊 Your BMI: ${bmi.toFixed(2)}\nHealth Status: ${healthStatus}\n${ageTip}`);
+});
+
+bot.onText(/\/reset/, msg => {
+  const id = msg.chat.id;
+
+  // Check if the user has data
+  if (!data[id]) {
+    return bot.sendMessage(id, "⚠️ You don't have any progress to reset.");
+  }
+
+  // Delete the user's data from memory
+  delete data[id];
+
+  // Save the updated data to data.json
+  saveData();
+
+  // Send confirmation message to the user
+  bot.sendMessage(id, "🧹 Your progress has been completely reset. Use /start to begin again.");
+});
+
 bot.onText(/\/weight (\d+(\.\d+)?)/, (msg, match) => {
   const id = msg.chat.id;
   const weight = parseFloat(match[1]);
@@ -220,24 +282,61 @@ bot.onText(/\/levels/, msg => {
 });
 
 bot.onText(/\/leaderboard/, msg => {
+  // Sort users by XP in descending order
   const leaderboard = Object.entries(data)
-    .map(([id, user]) => ({ id, xp: user.xp }))
+    .map(([id, user]) => {
+      // Get username or fallback to user ID if username is unavailable
+      const username = msg.chat.id === id ? msg.from.username : user.username || `ID ${id}`;
+      return { id, xp: user.xp, username };
+    })
     .sort((a, b) => b.xp - a.xp)
-    .slice(0, 5)
-    .map((u, i) => `${i + 1}. 🧍‍♂️ ID ${u.id.slice(-5)}: ${u.xp} XP`)
+    .slice(0, 5)  // Limit to top 5
+    .map((u, i) => `${i + 1}. ${u.username}: ${u.xp} XP`)
     .join('\n');
+  
   bot.sendMessage(msg.chat.id, `🏆 Leaderboard:\n${leaderboard}`);
 });
 
 bot.onText(/\/timer (.+) (\d+)/, (msg, match) => {
   const id = msg.chat.id;
-  const task = match[1];
-  const secs = parseInt(match[2]);
-  bot.sendMessage(id, `⏱️ Timer started for ${task}: ${secs}s`);
-  setTimeout(() => {
-    bot.sendMessage(id, `✅ Time's up for: ${task}`);
-  }, secs * 1000);
+  const task = match[1];  // Task name (e.g., "plank")
+  let duration = parseInt(match[2]);  // Duration in seconds
+
+  if (isNaN(duration) || duration <= 0) {
+    return bot.sendMessage(id, "❌ Invalid duration. Please provide a positive number of seconds.");
+  }
+
+  // Notify the user that the timer has started
+  bot.sendMessage(id, `⏱️ Timer started for ${task}: ${duration} seconds`);
+
+  let intervalId = setInterval(() => {
+    if (duration > 0) {
+      // Send periodic updates every second
+      bot.sendMessage(id, `⏳ ${duration} seconds remaining for ${task}`);
+
+      // Every 10 seconds, send a motivational message
+      if (duration % 10 === 0) {
+        const motivationalMessages = [
+          "💪 Keep going, Shadow Hunter! You're doing great!",
+          "🔥 Push through it, you’re getting stronger!",
+          "🏋️‍♂️ Stay focused, you're almost there!",
+          "⏳ Don't stop now, you're crushing it!",
+          "💥 Just a bit more, you've got this!"
+        ];
+
+        // Send a random motivational message from the array
+        const randomMessage = motivationalMessages[Math.floor(Math.random() * motivationalMessages.length)];
+        bot.sendMessage(id, randomMessage);
+      }
+
+      duration--; // Decrease the timer by 1 second
+    } else {
+      clearInterval(intervalId); // Stop the interval when time is up
+      bot.sendMessage(id, `✅ Time's up for: ${task}`);
+    }
+  }, 1000); // Update every 1 second
 });
+
 
 bot.on('photo', msg => {
   const id = msg.chat.id;
